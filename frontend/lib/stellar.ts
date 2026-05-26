@@ -259,21 +259,6 @@ export interface Orderbook {
   asks: OrderbookEntry[];
 }
 
-export interface TradeAggregation {
-  timestamp: string | number;
-  trade_count: string | number;
-  base_volume: string;
-  counter_volume: string;
-  price: string;
-}
-
-export interface OpenOffer {
-  id: string | number;
-  selling: any;
-  buying: any;
-  amount: string;
-  price: string;
-}
 
 export interface NetworkStats {
   latestLedgerSequence: number;
@@ -1106,6 +1091,87 @@ export async function getContractTipTotal(recipient: string): Promise<string> {
   }
 }
 
+// ─── NFT Receipts ───────────────────────────────────────────────────────────
+
+/**
+ * Build a Soroban contract invocation to mint a payment receipt (NFT).
+ * Simulates/preflights the transaction so it's ready for signing.
+ */
+export async function buildReceiptMintTransaction({
+  fromPublicKey,
+  toPublicKey,
+  amount,
+  memo,
+}: {
+  fromPublicKey: string;
+  toPublicKey: string;
+  amount: string;
+  memo?: string;
+}): Promise<Transaction> {
+  if (!CONTRACT_ID) {
+    throw new Error("Contract ID is not configured.");
+  }
+
+  const sourceAccount = await server.loadAccount(fromPublicKey);
+  const contract = new Contract(CONTRACT_ID);
+
+  const stroops = BigInt(Math.round(parseFloat(amount) * 10_000_000));
+  const memoStr = (memo ?? "").slice(0, 28);
+  const memoScVal = nativeToScVal(memoStr, { type: "symbol" });
+
+  const tx = new TransactionBuilder(sourceAccount, {
+    fee: "100",
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      contract.call(
+        "mint_receipt",
+        nativeToScVal(fromPublicKey, { type: "address" }),
+        nativeToScVal(toPublicKey, { type: "address" }),
+        nativeToScVal(stroops, { type: "i128" }),
+        memoScVal
+      )
+    )
+    .setTimeout(60)
+    .build();
+
+  const simulated = await sorobanServer.simulateTransaction(tx);
+
+  if (SorobanRpc.Api.isSimulationError(simulated)) {
+    throw new Error(`Receipt simulation failed: ${simulated.error}`);
+  }
+
+  return sorobanServer.prepareTransaction(tx);
+}
+
+/**
+ * Get the number of receipt NFTs minted for a payer.
+ */
+export async function getReceiptCount(payer: string): Promise<number> {
+  if (!CONTRACT_ID) return 0;
+  try {
+    const contract = new Contract(CONTRACT_ID);
+    const tx = new TransactionBuilder(
+      new Account(payer, "0"),
+      { fee: "100", networkPassphrase: NETWORK_PASSPHRASE }
+    )
+      .addOperation(
+        contract.call("get_receipt_count", nativeToScVal(payer, { type: "address" }))
+      )
+      .setTimeout(30)
+      .build();
+
+    const sim = await sorobanServer.simulateTransaction(tx);
+    if (SorobanRpc.Api.isSimulationSuccess(sim) && sim.result) {
+      const value = scValToNative(sim.result.retval);
+      return Number(value);
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function getRecentPaymentsForSparkline(
   publicKey: string,
   limit = 10
@@ -1117,16 +1183,15 @@ export async function getRecentPaymentsForSparkline(
 
 
 /**
- * Fetch recent payments for dashboard statistics grouping.
+ * Wrapper for fetching recent payments specifically for analytics/stats.
  */
 export async function getRecentPaymentsForStats(
   publicKey: string,
-  limit = 200
+  limit = 100
 ): Promise<PaymentRecord[]> {
   const { records } = await getPaymentHistory(publicKey, limit);
   return records;
 }
-
 
 /**
  * Start a server-sent events (SSE) stream of payment operations for an account.
@@ -1143,17 +1208,6 @@ export async function getRecentPaymentsForStats(
  * @param onError - Optional error handler for stream errors.
  * @returns Function to close the underlying EventSource and stop streaming.
  */
-/**
- * Wrapper for fetching recent payments specifically for analytics/stats.
- */
-export async function getRecentPaymentsForStats(
-  publicKey: string,
-  limit = 100
-): Promise<PaymentRecord[]> {
-  const { records } = await getPaymentHistory(publicKey, limit);
-  return records;
-}
-
 export function streamPayments(
   publicKey: string,
   onPayment: PaymentStreamHandler,

@@ -1,12 +1,6 @@
 "use strict";
 
-const { Horizon } = require("@stellar/stellar-sdk");
 require("dotenv").config();
-
-const HORIZON_URL =
-  process.env.HORIZON_URL || "https://horizon-testnet.stellar.org";
-
-const server = new Horizon.Server(HORIZON_URL);
 
 // In-memory storage for scheduled transactions
 // In a production environment, this would be replaced with a database
@@ -72,7 +66,7 @@ function getPendingTransactions(publicKey) {
   const now = Date.now();
   const pending = [];
 
-  for (const [id, tx] of scheduledTransactions.entries()) {
+  for (const [, tx] of scheduledTransactions.entries()) {
     if (tx.publicKey === publicKey && tx.submitAt > now && tx.attempts < 3) {
       pending.push({
         id: tx.id,
@@ -114,7 +108,7 @@ function getDueTransactions() {
   const now = Date.now();
   const due = [];
 
-  for (const [id, tx] of scheduledTransactions.entries()) {
+  for (const [, tx] of scheduledTransactions.entries()) {
     // Only include transactions that:
     // 1. Are due for submission (submitAt <= now)
     // 2. Haven't exceeded max attempts (attempts < 3)

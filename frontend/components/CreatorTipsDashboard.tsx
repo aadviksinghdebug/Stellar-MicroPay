@@ -44,11 +44,6 @@ export default function CreatorTipsDashboard({
   const [page, setPage] = useState(0);
   const pageSize = 10;
 
-  useEffect(() => {
-    fetchTips();
-  }, [fetchTips, page]);
-
-
   const fetchTips = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -81,6 +76,10 @@ export default function CreatorTipsDashboard({
       setLoading(false);
     }
   }, [publicKey, page]);
+
+  useEffect(() => {
+    fetchTips();
+  }, [fetchTips]);
 
 
   const formatTimestamp = (timestamp: string) => {

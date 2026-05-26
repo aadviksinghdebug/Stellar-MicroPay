@@ -28,7 +28,7 @@ function createTurretsApp() {
 
   app.use("/tx-functions", turretsRoutes);
 
-  app.use((err, req, res, next) => {
+  app.use((err, req, res, _next) => {
     const status = err.status || 500;
     res.status(status).json({ error: err.message || "Internal Server Error" });
   });
